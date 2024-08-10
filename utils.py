@@ -1,3 +1,5 @@
+import json
+
 from tqdm import tqdm
 import os
 import unicodedata
@@ -70,6 +72,28 @@ def get_vocab_QNLI(data_dir,tokenizer,tokenizer_type="subword"):
         for token in tokenizer.vocab:
             vocab[token]+=1
     return vocab
+
+
+def get_vocab_PB(data_dir, tokenizer, tokenizer_type="subword"):
+    vocab = Counter()
+    dir_list = os.listdir(data_dir)
+    dir_list.remove('.DS_Store')
+    for d in dir_list:
+        with open(os.path.join(data_dir, d, 'longResult.json'),'r') as f:
+            data = json.load(f)
+            text = " ".join(eval(data['gptAnswerInList']))
+            # print(text)
+            if tokenizer_type == "subword":
+                tokenized_text = tokenizer.tokenize(text)
+            elif tokenizer_type == "word":
+                tokenized_text = [token.text for token in tokenizer(text)]
+            for token in tokenized_text:
+                vocab[token] += 1
+    if tokenizer_type == "subword":
+        for token in tokenizer.vocab:
+            vocab[token] += 1
+    return vocab
+
 
 
 

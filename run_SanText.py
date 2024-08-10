@@ -1,4 +1,5 @@
 import argparse
+import json
 import torch
 import random
 import numpy as np
@@ -10,7 +11,7 @@ from scipy.special import softmax
 from functools import partial
 from multiprocessing import Pool, cpu_count
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances, manhattan_distances
-from utils import get_vocab_SST2, get_vocab_CliniSTS, get_vocab_QNLI, word_normalize
+from utils import get_vocab_SST2, get_vocab_CliniSTS, get_vocab_QNLI, word_normalize, get_vocab_PB
 from spacy.lang.en import English
 from transformers import BertTokenizer, BertForMaskedLM
 from SanText import SanText_plus,SanText_plus_init
@@ -36,7 +37,7 @@ def main():
     # Required parameters
     parser.add_argument(
         "--data_dir",
-        default="./data/SST-2/",
+        default="./data/QNLI/",
         type=str,
         help="The input dir"
     )
@@ -84,7 +85,7 @@ def main():
     )
 
     parser.add_argument('--task',
-                        choices=['CliniSTS', "SST-2", "QNLI"],
+                        choices=['CliniSTS', "SST-2", "QNLI", 'PB'],
                         default='SST-2',
                         help='NLP eval tasks')
 
@@ -134,6 +135,8 @@ def main():
         vocab = get_vocab_CliniSTS(args.data_dir, tokenizer, tokenizer_type=tokenizer_type)
     elif args.task == "QNLI":
         vocab = get_vocab_QNLI(args.data_dir, tokenizer, tokenizer_type=tokenizer_type)
+    elif args.task == "PB":
+        vocab = get_vocab_PB(args.data_dir, tokenizer, tokenizer_type=tokenizer_type)
     else:
         raise NotImplementedError
 
@@ -204,6 +207,47 @@ def main():
     prob_matrix = cal_probability(all_word_embed,sensitive_word_embed, args.epsilon)
 
     threads = min(args.threads, cpu_count())
+
+    if args.task == "PB":
+        dir_list = os.listdir(args.data_dir)
+        dir_list.remove('.DS_Store')
+        docs = []
+        len_list = []
+        for dir_name in dir_list:
+            data_file = os.path.join(args.data_dir, dir_name, 'longResult.json')
+            with open(data_file, 'r') as f:
+                data = json.load(f)
+                data = eval(data['gptAnswerInList'])
+                len_list.append(len(data))
+                for text in data:
+                    doc = [token.text for token in tokenizer(text)]
+                    docs.append(doc)
+        assert len(docs) == sum(len_list)
+
+        logger.info("Sanitizing texts...")
+        with Pool(threads, initializer=SanText_plus_init, initargs=(prob_matrix, word2id, sword2id, words, args.p, tokenizer)) as p:
+            annotate_ = partial(
+                SanText_plus,
+            )
+            results = list(
+                tqdm(
+                    p.imap(annotate_, docs, chunksize=32),
+                    total=len(docs),
+                    desc="Sanitize docs using SanText",
+                )
+            )
+            p.close()
+
+        assert len(results) == sum(len_list)
+        logger.info("Saving files to %s" % args.output_dir)
+        index = 0
+        for i, dir_name in enumerate(dir_list):
+            out_file = os.path.join(args.output_dir, dir_name + ".txt")
+            with open(out_file, 'w') as f:
+                content = results[index:index + len_list[i]]
+                f.write(str(content))
+            index += len_list[i]
+        return
 
     for file_name in ['train.tsv','dev.tsv']:
         data_file = os.path.join(args.data_dir, file_name)
