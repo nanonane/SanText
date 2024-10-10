@@ -76,13 +76,14 @@ def get_vocab_QNLI(data_dir,tokenizer,tokenizer_type="subword"):
 
 def get_vocab_PB(data_dir, tokenizer, tokenizer_type="subword"):
     vocab = Counter()
-    dir_list = os.listdir(data_dir)
-    dir_list.remove('.DS_Store')
-    for d in dir_list:
-        with open(os.path.join(data_dir, d, 'longResult.json'),'r') as f:
+    file_list = os.listdir(data_dir)
+    if '.DS_Store' in file_list:
+        file_list.remove('.DS_Store')
+    for f in file_list:
+        with open(os.path.join(data_dir, f),'r') as f:
             data = json.load(f)
-            text = " ".join(eval(data['gptAnswerInList']))
-            # print(text)
+            text = " ".join(data)
+            print(text)
             if tokenizer_type == "subword":
                 tokenized_text = tokenizer.tokenize(text)
             elif tokenizer_type == "word":

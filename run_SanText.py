@@ -209,15 +209,15 @@ def main():
     threads = min(args.threads, cpu_count())
 
     if args.task == "PB":
-        dir_list = os.listdir(args.data_dir)
-        dir_list.remove('.DS_Store')
+        file_list = os.listdir(args.data_dir)
+        if '.DS_Store' in file_list:
+            file_list.remove('.DS_Store')
         docs = []
         len_list = []
-        for dir_name in dir_list:
-            data_file = os.path.join(args.data_dir, dir_name, 'longResult.json')
+        for file_name in file_list:
+            data_file = os.path.join(args.data_dir, file_name)
             with open(data_file, 'r') as f:
                 data = json.load(f)
-                data = eval(data['gptAnswerInList'])
                 len_list.append(len(data))
                 for text in data:
                     doc = [token.text for token in tokenizer(text)]
@@ -241,11 +241,12 @@ def main():
         assert len(results) == sum(len_list)
         logger.info("Saving files to %s" % args.output_dir)
         index = 0
-        for i, dir_name in enumerate(dir_list):
-            out_file = os.path.join(args.output_dir, dir_name + ".txt")
+        for i, file_name in enumerate(file_list):
+            file_idx = file_name.split(".")[0]
+            out_file = os.path.join(args.output_dir, file_idx + ".json")
             with open(out_file, 'w') as f:
                 content = results[index:index + len_list[i]]
-                f.write(str(content))
+                json.dump(content, f)
             index += len_list[i]
         return
 
